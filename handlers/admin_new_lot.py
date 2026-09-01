@@ -20,17 +20,11 @@ from utils import parse_msk_datetime, esc
  
 router = Router(name="new_lot")
  
-# Настройка розыгрыша (весь мастер /new_lot и /end_lot) — только в личке с ботом.
 router.message.filter(F.chat.type == "private")
 router.callback_query.filter(F.message.chat.type == "private")
  
  
 def _get_forward_info(message: Message):
-    """
-    Достаём (канал, id оригинального сообщения) из пересланного поста.
-    Bot API 7.0+ отдаёт это через message.forward_origin (MessageOriginChannel),
-    старые поля forward_from_chat/forward_from_message_id — запасной вариант.
-    """
     if isinstance(message.forward_origin, MessageOriginChannel):
         return message.forward_origin.chat, message.forward_origin.message_id
     if message.forward_from_chat is not None:
@@ -39,7 +33,6 @@ def _get_forward_info(message: Message):
  
  
 async def _attach_button(bot: Bot, giveaway: dict, chat_id: int, message_id: int) -> bool:
-    """Прикрепляет кнопку «Участвовать» к посту в канале. Возвращает True при успехе."""
     me = await bot.get_me()
     kb = giveaway_post_kb(me.username, giveaway["id"], giveaway["button_text"])
     try:
@@ -71,7 +64,7 @@ async def new_lot_start(message: Message, state: FSMContext):
 async def new_lot_got_forward(message: Message, state: FSMContext, bot: Bot):
     chat, _ = _get_forward_info(message)
     if chat is None or chat.type != "channel":
-        await message.answer("</b>Это сообщение не из канала. Перешлите сообщение именно из канала</b>.<tg-emoji emoji-id=\"5195216901080390378\">✋</tg-emoji>")
+        await message.answer("<b>Это сообщение не из канала. Перешлите сообщение именно из канала</b>.<tg-emoji emoji-id=\"5195216901080390378\">✋</tg-emoji>")
         return
  
     try:
@@ -115,10 +108,6 @@ async def new_lot_waiting_forward_fallback(message: Message):
  
 @router.message(NewLotStates.waiting_post)
 async def new_lot_got_post(message: Message, state: FSMContext):
-    """
-    Принимаем ЛЮБОЙ тип сообщения как пост. Запоминаем, ГДЕ лежит оригинал
-    (в личке с ботом) — позже соберём из него финальное превью с кнопкой.
-    """
     data = await state.get_data()
     await db.update_giveaway(
         data["giveaway_id"],
@@ -150,7 +139,7 @@ async def new_lot_button_text_choice(callback: CallbackQuery, state: FSMContext)
     await state.set_state(NewLotStates.waiting_winners_count)
     await callback.message.edit_text(
         f"<tg-emoji emoji-id=\"5195058485506648605\">👋</tg-emoji> <b>Текст кнопки: «{esc(text)}»</b>\n\n"
-        "<tg-emoji emoji-id=\"5195202345436224393\">🫰</tg-emoji> </b>Введите количество победителей (число от 1 до 100):</b>"
+        "<tg-emoji emoji-id=\"5195202345436224393\">🫰</tg-emoji> <b>Введите количество победителей (число от 1 до 100):</b>"
     )
     await callback.answer()
  
@@ -177,7 +166,7 @@ async def new_lot_winners_count(message: Message, state: FSMContext):
     await db.update_giveaway(data["giveaway_id"], winners_count=int(raw))
     await state.set_state(NewLotStates.waiting_datetime)
     await message.answer(
-        "<b>Введите дату и время итогов.</b><tg-emoji emoji-id=\"5195058485506648605\">👋</tg-emoji>\n\т"
+        "<b>Введите дату и время итогов.</b><tg-emoji emoji-id=\"5195058485506648605\">👋</tg-emoji>\n\n"
         "<blockquote>"
         "Формат: <code>ДД.ММ.ГГГГ ЧЧ:ММ</code>\n"
         "Время — московское (МСК, UTC+3). Дата и время должны быть в будущем.\n\n"
@@ -227,12 +216,6 @@ async def new_lot_cancel(callback: CallbackQuery, state: FSMContext):
  
 @router.callback_query(F.data.startswith("publish:"))
 async def new_lot_send_preview(callback: CallbackQuery, state: FSMContext, bot: Bot):
-    """
-    Собирает финальное превью: копирует ваш пост НОВЫМ сообщением в ту же личку,
-    сразу с прикреплённой кнопкой «Участвовать». Поскольку это личный чат — не
-    канал — ограничение Telegram на анимированные эмодзи сюда не относится,
-    и анимация сохранится (при условии, что у владельца бота есть Premium).
-    """
     giveaway_id = int(callback.data.split(":")[1])
     giveaway = await db.get_giveaway(giveaway_id)
     if not giveaway:
@@ -261,18 +244,11 @@ async def new_lot_send_preview(callback: CallbackQuery, state: FSMContext, bot: 
     await callback.answer()
  
  
-# ---------- автоматическое прикрепление кнопки после пересылки в канал ----------
- 
 @router.channel_post(F.chat.type == "channel")
 async def on_channel_post(message: Message, bot: Bot):
-    """
-    Ловим ЛЮБОЙ новый пост в любом канале, где есть бот. Если для этого канала
-    есть розыгрыш в статусе 'awaiting_channel_post' — считаем, что это и есть
-    пересланное превью, и сразу прикрепляем кнопку.
-    """
     giveaway = await db.get_awaiting_giveaway_for_channel(message.chat.id)
     if not giveaway:
-        return  # обычный пост канала, не имеющий отношения к розыгрышам — не трогаем
+        return
  
     ok = await _attach_button(bot, giveaway, message.chat.id, message.message_id)
     if ok:
@@ -285,18 +261,11 @@ async def on_channel_post(message: Message, bot: Bot):
             pass
  
  
-# ---------- запасной способ: ручная пересылка уже опубликованного поста ----------
- 
 @router.message(F.forward_origin | F.forward_from_chat)
 async def manual_attach_fallback(message: Message, bot: Bot, state: FSMContext):
-    """
-    На случай, если автоматика по каким-то причинам не сработала (например, бот
-    был недоступен в момент публикации): создатель может вручную переслать уже
-    опубликованный (без кнопки) пост боту, и бот прикрепит кнопку тем же способом.
-    """
     current_state = await state.get_state()
     if current_state is not None:
-        return  # это сообщение уже обработано другим шагом мастера — не вмешиваемся
+        return
  
     chat, source_message_id = _get_forward_info(message)
     if chat is None or chat.type != "channel" or source_message_id is None:
@@ -315,8 +284,6 @@ async def manual_attach_fallback(message: Message, bot: Bot, state: FSMContext):
             "«Редактировать сообщения других участников» в этом канале."
         )
  
- 
-# ---------- досрочное завершение своего розыгрыша (доступно любому создателю) ----------
  
 @router.message(Command("end_lot"))
 async def end_lot_start(message: Message):
@@ -361,7 +328,7 @@ async def end_lot_finish(callback: CallbackQuery, bot: Bot):
             reply_markup=None,
         )
     except (TelegramBadRequest, TelegramForbiddenError):
-        pass  # если пост уже удалён или недоступен — не страшно, статус всё равно обновим
+        pass
  
     await db.update_giveaway(giveaway_id, status="finished")
     await callback.message.edit_text("✅ Розыгрыш завершён, кнопка «Участвовать» убрана из поста.")
@@ -372,3 +339,4 @@ async def end_lot_finish(callback: CallbackQuery, bot: Bot):
 async def end_lot_cancel(callback: CallbackQuery):
     await callback.message.edit_text("Отменено, розыгрыш продолжается.")
     await callback.answer()
+ 
