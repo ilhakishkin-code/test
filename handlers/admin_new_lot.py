@@ -127,7 +127,7 @@ async def new_lot_got_post(message: Message, state: FSMContext):
     )
     await state.set_state(None)
     await message.answer(
-        "<b>Пост получен. <tg-emoji emoji-id=\"5195216901080390378\">✋</tg-emoji>\n\n"
+        "<b>Пост получен.</b> <tg-emoji emoji-id=\"5195216901080390378\">✋</tg-emoji>\n\n"
      "<blockquote>"
         "Выберите готовый вариант текста кнопки или напишите свой:"
      "</blockquote>",
@@ -162,7 +162,7 @@ async def new_lot_button_text_custom(message: Message, state: FSMContext):
     await db.update_giveaway(data["giveaway_id"], button_text=text)
     await state.set_state(NewLotStates.waiting_winners_count)
     await message.answer(f"<tg-emoji emoji-id=\"5195058485506648605\">👋</tg-emoji> <b>Текст кнопки: «{esc(text)}»</b>\n\n"
-                         "<tg-emoji emoji-id=\"5195202345436224393\">🫰</tg-emoji> </b>Введите количество победителей (число от 1 до 100):</b>"
+                         "<tg-emoji emoji-id=\"5195202345436224393\">🫰</tg-emoji> <b>Введите количество победителей (число от 1 до 100):</b>"
                         )
  
  
@@ -177,7 +177,7 @@ async def new_lot_winners_count(message: Message, state: FSMContext):
     await db.update_giveaway(data["giveaway_id"], winners_count=int(raw))
     await state.set_state(NewLotStates.waiting_datetime)
     await message.answer(
-        "<b>Введите дату и время итогов.<tg-emoji emoji-id=\"5195058485506648605\">👋</tg-emoji></b>\n\т"
+        "<b>Введите дату и время итогов.</b><tg-emoji emoji-id=\"5195058485506648605\">👋</tg-emoji>\n\т"
         "<blockquote>"
         "Формат: <code>ДД.ММ.ГГГГ ЧЧ:ММ</code>\n"
         "Время — московское (МСК, UTC+3). Дата и время должны быть в будущем.\n\n"
@@ -256,9 +256,7 @@ async def new_lot_send_preview(callback: CallbackQuery, state: FSMContext, bot: 
     )
     await state.clear()
     await callback.message.answer(
-        f"👆 Перешлите сообщение выше в канал «{esc(giveaway['channel_title'])}».\n\n"
-        "Кнопка при пересылке пропадёт — это нормально, бот сам заметит новый пост "
-        "в канале и прикрепит рабочую кнопку автоматически, обычно в течение пары секунд."
+        f"<tg-emoji emoji-id=\"5195058485506648605\">👋</tg-emoji> <b>Теперь перешлите сообщение выше в канал.</b> «{esc(giveaway['channel_title'])}».\n\n"
     )
     await callback.answer()
  
